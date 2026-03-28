@@ -92,6 +92,39 @@ static void recycled_cb(void)
 	advertising_start();
 }
 
+#if defined(CONFIG_BT_PRIVACY)
+static void refresh_local_identity(const char *context)
+{
+	struct bt_le_oob oob;
+	char addr[BT_ADDR_LE_STR_LEN];
+	int err = bt_le_oob_get_local(BT_ID_DEFAULT, &oob);
+
+	if (err) {
+		printk("Failed to refresh local identity (%s), err %d\n",
+		       context, err);
+		return;
+	}
+
+	bt_addr_le_to_str(&oob.addr, addr, sizeof(addr));
+	printk("Local identity (%s): %s\n", context, addr);
+}
+#endif /* CONFIG_BT_PRIVACY */
+
+#if defined(CONFIG_BT_SMP)
+static void identity_resolved(struct bt_conn *conn,
+			      const bt_addr_le_t *rpa,
+			      const bt_addr_le_t *identity)
+{
+	char rpa_str[BT_ADDR_LE_STR_LEN];
+	char id_str[BT_ADDR_LE_STR_LEN];
+
+	bt_addr_le_to_str(rpa, rpa_str, sizeof(rpa_str));
+	bt_addr_le_to_str(identity, id_str, sizeof(id_str));
+
+	printk("Identity resolved: %s -> %s\n", rpa_str, id_str);
+}
+#endif
+
 #ifdef CONFIG_BT_LBS_SECURITY_ENABLED
 static void security_changed(struct bt_conn *conn, bt_security_t level,
 			     enum bt_security_err err)
@@ -113,6 +146,9 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.connected        = connected,
 	.disconnected     = disconnected,
 	.recycled         = recycled_cb,
+#if defined(CONFIG_BT_SMP)
+	.identity_resolved = identity_resolved,
+#endif
 #ifdef CONFIG_BT_LBS_SECURITY_ENABLED
 	.security_changed = security_changed,
 #endif
@@ -144,6 +180,10 @@ static void pairing_complete(struct bt_conn *conn, bool bonded)
 	bt_addr_le_to_str(bt_conn_get_dst(conn), addr, sizeof(addr));
 
 	printk("Pairing completed: %s, bonded: %d\n", addr, bonded);
+
+#if defined(CONFIG_BT_PRIVACY)
+	refresh_local_identity("pairing");
+#endif
 }
 
 static void pairing_failed(struct bt_conn *conn, enum bt_security_err reason)
@@ -251,6 +291,10 @@ int main(void)
 	if (IS_ENABLED(CONFIG_SETTINGS)) {
 		settings_load();
 	}
+
+#if defined(CONFIG_BT_PRIVACY)
+	refresh_local_identity("startup");
+#endif
 
 	err = bt_lbs_init(&lbs_callbacs);
 	if (err) {
