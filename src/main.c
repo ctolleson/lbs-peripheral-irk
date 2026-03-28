@@ -26,6 +26,8 @@
 
 #include <dk_buttons_and_leds.h>
 
+#include "app_logic.h"
+
 #define DEVICE_NAME             CONFIG_BT_DEVICE_NAME
 #define DEVICE_NAME_LEN         (sizeof(DEVICE_NAME) - 1)
 
@@ -37,8 +39,6 @@
 #define USER_LED                DK_LED3
 
 #define USER_BUTTON             DK_BTN1_MSK
-
-static bool app_button_state;
 static struct k_work adv_work;
 
 static const struct bt_data ad[] = {
@@ -217,7 +217,7 @@ static void app_led_cb(bool led_state)
 
 static bool app_button_cb(void)
 {
-	return app_button_state;
+	return app_logic_get_button_state();
 }
 
 static struct bt_lbs_cb lbs_callbacs = {
@@ -228,10 +228,7 @@ static struct bt_lbs_cb lbs_callbacs = {
 static void button_changed(uint32_t button_state, uint32_t has_changed)
 {
 	if (has_changed & USER_BUTTON) {
-		uint32_t user_button_state = button_state & USER_BUTTON;
-
-		bt_lbs_send_button_state(user_button_state);
-		app_button_state = user_button_state ? true : false;
+		app_logic_handle_button_change(button_state, has_changed, USER_BUTTON);
 	}
 }
 
@@ -295,6 +292,8 @@ int main(void)
 #if defined(CONFIG_BT_PRIVACY)
 	refresh_local_identity("startup");
 #endif
+
+	app_logic_init();
 
 	err = bt_lbs_init(&lbs_callbacs);
 	if (err) {
